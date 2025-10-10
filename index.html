@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Federated GWAS Logistic Regression</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.11.0"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0"></script>
+</head>
+<body class="bg-gray-900 text-gray-100 min-h-screen">
+    <div class="container mx-auto px-4 py-8 max-w-7xl">
+        <!-- Header -->
+        <div class="mb-8">
+            <h1 class="text-4xl font-bold text-blue-400 mb-2">Federated GWAS Analysis</h1>
+            <p class="text-gray-400">Decentralized Logistic Regression for Polygenic Risk Score Computation</p>
+        </div>
+
+        <!-- Status Bar -->
+        <div class="bg-gray-800 rounded-lg p-4 mb-6 border border-gray-700">
+            <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                    <p class="text-gray-400 text-sm">Status</p>
+                    <p id="status" class="text-lg font-semibold text-green-400">Disconnected</p>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-sm">Peers Connected</p>
+                    <p id="peerCount" class="text-lg font-semibold">0</p>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-sm">Current Round</p>
+                    <p id="currentRound" class="text-lg font-semibold">0</p>
+                </div>
+                <div>
+                    <p class="text-gray-400 text-sm">Samples Loaded</p>
+                    <p id="sampleCount" class="text-lg font-semibold">0</p>
+                </div>
+            </div>
+        </div>
+
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+            <!-- Left Panel: Configuration -->
+            <div class="lg:col-span-1 space-y-6">
+                <!-- Data Upload -->
+                <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                    <h2 class="text-xl font-semibold mb-4 text-blue-300">1. Load GWAS Data</h2>
+                    <input type="file" id="fileInput" accept=".csv" class="hidden">
+                    <button onclick="document.getElementById('fileInput').click()" class="w-full bg-blue-600 hover:bg-blue-700 text-white font-medium py-3 px-4 rounded-lg transition">
+                        Upload CSV File
+                    </button>
+                    <p id="fileStatus" class="text-sm text-gray-400 mt-2">No file selected</p>
+                </div>
+
+                <!-- Federation Config -->
+                <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                    <h2 class="text-xl font-semibold mb-4 text-blue-300">2. Configure Federation</h2>
+                    <div class="space-y-3">
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">Federation ID</label>
+                            <input type="text" id="roomId" value="gwas-federation-001" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">Peer Name</label>
+                            <input type="text" id="selfName" value="" placeholder="Your identifier" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">Min Peers</label>
+                            <input type="number" id="minPeers" value="3" min="2" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">Max Rounds</label>
+                            <input type="number" id="maxRounds" value="20" min="1" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm">
+                        </div>
+                        <div>
+                            <label class="block text-sm text-gray-400 mb-1">Learning Rate</label>
+                            <input type="number" id="learningRate" value="0.01" step="0.001" class="w-full bg-gray-700 border border-gray-600 rounded px-3 py-2 text-sm">
+                        </div>
+                    </div>
+                    <button id="connectBtn" onclick="initializeFederation()" class="w-full bg-green-600 hover:bg-green-700 text-white font-medium py-3 px-4 rounded-lg mt-4 transition">
+                        Connect to Federation
+                    </button>
+                </div>
+
+                <!-- Training Control -->
+                <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                    <h2 class="text-xl font-semibold mb-4 text-blue-300">3. Training Control</h2>
+                    <button id="startBtn" onclick="startTraining()" disabled class="w-full bg-purple-600 hover:bg-purple-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg mb-2 transition">
+                        Start Auto-Training
+                    </button>
+                    <button id="stopBtn" onclick="stopTraining()" disabled class="w-full bg-red-600 hover:bg-red-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-3 px-4 rounded-lg transition">
+                        Stop Training
+                    </button>
+                </div>
+
+                <!-- Peers List -->
+                <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                    <h2 class="text-xl font-semibold mb-4 text-blue-300">Connected Peers</h2>
+                    <div id="peersList" class="space-y-2 text-sm">
+                        <p class="text-gray-500">No peers connected</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Right Panel: Results and Visualization -->
+            <div class="lg:col-span-2 space-y-6">
+                <!-- Training Log -->
+                <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                    <h2 class="text-xl font-semibold mb-4 text-blue-300">Training Progress</h2>
+                    <div id="trainingLog" class="bg-gray-900 rounded p-4 h-64 overflow-y-auto text-sm font-mono space-y-1">
+                        <p class="text-gray-500">Waiting to start...</p>
+                    </div>
+                </div>
+
+                <!-- Convergence Chart -->
+                <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                    <h2 class="text-xl font-semibold mb-4 text-blue-300">Model Convergence</h2>
+                    <canvas id="convergenceChart" class="w-full" style="max-height: 300px;"></canvas>
+                </div>
+
+                <!-- Model Results -->
+                <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                    <h2 class="text-xl font-semibold mb-4 text-blue-300">Model Performance</h2>
+                    <div class="grid grid-cols-2 gap-4 mb-4">
+                        <div class="bg-gray-900 rounded p-4">
+                            <p class="text-gray-400 text-sm">Current Loss</p>
+                            <p id="currentLoss" class="text-2xl font-bold text-blue-400">-</p>
+                        </div>
+                        <div class="bg-gray-900 rounded p-4">
+                            <p class="text-gray-400 text-sm">Accuracy</p>
+                            <p id="currentAccuracy" class="text-2xl font-bold text-green-400">-</p>
+                        </div>
+                    </div>
+                    <button onclick="evaluateModel()" id="evaluateBtn" disabled class="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition">
+                        Evaluate Model
+                    </button>
+                </div>
+
+                <!-- SNP Effects -->
+                <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
+                    <h2 class="text-xl font-semibold mb-4 text-blue-300">Top SNP Effects</h2>
+                    <div id="snpEffects" class="bg-gray-900 rounded p-4 max-h-96 overflow-y-auto">
+                        <p class="text-gray-500 text-sm">Train model to see SNP effect sizes</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script type="module" src="app.js"></script>
+</body>
+</html>
