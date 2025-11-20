@@ -14,7 +14,7 @@
         <!-- Header -->
         <div class="mb-8">
             <h1 class="text-4xl font-bold text-blue-400 mb-2">Federated GWAS Analysis</h1>
-            <p class="text-gray-400">Decentralized Logistic Regression for Polygenic Risk Score Computation</p>
+            <p class="text-gray-400">Decentralized, Peer-to-Peer Logistic Regression for Polygenic Risk Score Computation</p>
         </div>
 
         <!-- Status Bar -->
@@ -114,7 +114,7 @@
 
                 <!-- Convergence Chart -->
                 <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
-                    <h2 class="text-xl font-semibold mb-4 text-blue-300">Model Convergence</h2>
+                    <h2 class="text-xl font-semibold mb-4 text-blue-300">Model Convergence (Loss vs AUC)</h2>
                     <canvas id="convergenceChart" class="w-full" style="max-height: 300px;"></canvas>
                 </div>
 
@@ -127,8 +127,8 @@
                             <p id="currentLoss" class="text-2xl font-bold text-blue-400">-</p>
                         </div>
                         <div class="bg-gray-900 rounded p-4">
-                            <p class="text-gray-400 text-sm">Accuracy</p>
-                            <p id="currentAccuracy" class="text-2xl font-bold text-green-400">-</p>
+                            <p class="text-gray-400 text-sm">Current AUC</p>
+                            <p id="currentAUC" class="text-2xl font-bold text-purple-400">-</p>
                         </div>
                     </div>
                     <button onclick="evaluateModel()" id="evaluateBtn" disabled class="w-full bg-indigo-600 hover:bg-indigo-700 disabled:bg-gray-600 disabled:cursor-not-allowed text-white font-medium py-2 px-4 rounded-lg transition">
@@ -138,9 +138,13 @@
 
                 <!-- SNP Effects -->
                 <div class="bg-gray-800 rounded-lg p-6 border border-gray-700">
-                    <h2 class="text-xl font-semibold mb-4 text-blue-300">Top SNP Effects</h2>
-                    <div id="snpEffects" class="bg-gray-900 rounded p-4 max-h-96 overflow-y-auto">
-                        <p class="text-gray-500 text-sm">Train model to see SNP effect sizes</p>
+                    <h2 class="text-xl font-semibold mb-4 text-blue-300">Top SNP Effects (Forest Plot)</h2>
+                    <div class="flex justify-between text-xs text-gray-500 mb-2 px-2">
+                        <span>SNP Name</span>
+                        <span>Effect Size (95% CI)</span>
+                    </div>
+                    <div id="snpEffects" class="bg-gray-900 rounded p-4 max-h-96 overflow-y-auto space-y-4">
+                        <p class="text-gray-500 text-sm">Train model to see Forest Plot of SNP effects</p>
                     </div>
                 </div>
             </div>
