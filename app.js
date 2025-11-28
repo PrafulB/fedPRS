@@ -1,6 +1,8 @@
 // import { Decentifai } from 'http://localhost:5505/src/decentifai.js';
 import { Decentifai } from 'https://prafulb.github.io/decentifai/src/decentifai.js';
 
+let GET_TURN_CREDS_API = "https://noisy-math-e490.prtsh32.workers.dev/"
+
 let decentifai = null;
 let decentifaiAppId = "FedPRS"
 let model = null;
@@ -13,17 +15,13 @@ let convergenceChart = null;
 window.decentifai = null;
 window.model = null;
 
-// --- Helper: AUC Calculation ---
 function calculateAUC(yTrue, yPred) {
-    // Combine arrays
     const data = yTrue.map((label, i) => ({ label, pred: yPred[i] }));
-    // Sort by prediction score descending
     data.sort((a, b) => b.pred - a.pred);
 
     let posCount = 0;
     let negCount = 0;
 
-    // Count positives and negatives
     data.forEach(item => {
         if (item.label === 1) posCount++;
         else negCount++;
@@ -32,12 +30,10 @@ function calculateAUC(yTrue, yPred) {
     let auc = 0;
     let posFound = 0;
 
-    // Calculate Area via Mann-Whitney U equivalent / integration
     data.forEach(item => {
         if (item.label === 1) {
             posFound++;
         } else {
-            // For every negative sample, we add the number of positives ranked higher than it
             auc += posFound;
         }
     });
@@ -131,6 +127,11 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
         }
     });
 });
+
+async function getICEServers() {
+    const { iceServers } = await (await fetch(GET_TURN_CREDS_API)).json()
+    return iceServers
+}
 
 function processGWASData(data) {
     if (data.length === 0) {
@@ -230,7 +231,6 @@ window.initializeFederation = async function () {
         return loss[0];
     };
 
-    // NEW: Helper method to get AUC for the federation loop
     model.getAUC = async function () {
         if (!testData) return null;
         const xs = tf.tensor2d(testData.features);
@@ -255,7 +255,8 @@ window.initializeFederation = async function () {
         decentifai = new Decentifai({
             appId: decentifaiAppId,
             roomId: roomId,
-            connectionType: 'webrtc',
+            connectionType: searchParams.get("connectionType") === "trystero" ? "trystero" : 'webrtc',
+            iceServers: searchParams.get("useTurn") === "true" ? await getICEServers(): [],
             backend: 'tfjs',
             metadata: {
                 name: selfName
@@ -264,7 +265,7 @@ window.initializeFederation = async function () {
             trainingData: trainingData,
             testData: testData,
             trainingOptions: {
-                epochs: 1,
+                epochs: 3,
                 batchSize: 5000,
                 verbose: 0,
                 shuffle: true
@@ -585,4 +586,5 @@ function logMessage(message, type = 'log') {
 }
 
 // Initial log message
+const searchParams = new URLSearchParams(window.location.search)
 logMessage('Application loaded. Upload GWAS data to begin.', 'info');
