@@ -1,5 +1,5 @@
-// import { Decentifai } from 'http://localhost:5505/src/decentifai.js';
-import { Decentifai } from 'https://prafulb.github.io/decentifai/src/decentifai.js';
+import { Decentifai } from 'http://localhost:5505/src/decentifai.js';
+// import { Decentifai } from 'https://prafulb.github.io/decentifai/src/decentifai.js';
 
 let GET_TURN_CREDS_API = "https://noisy-math-e490.prtsh32.workers.dev/"
 
@@ -117,9 +117,15 @@ document.getElementById('fileInput').addEventListener('change', async (e) => {
         header: true,
         dynamicTyping: true,
         skipEmptyLines: true,
-        complete: (results) => {
+        complete: async (results) => {
             processGWASData(results.data);
             document.getElementById('fileStatus').textContent = `✓ Loaded: ${file.name}`;
+            if (decentifai !== null) {
+                decentifai.trainingData = trainingData
+                decentifai.testData = testData
+                createLRModel()
+                decentifai.setModel(model)
+            }
         },
         error: (error) => {
             logMessage(`Error loading file: ${error.message}`, 'error');
@@ -140,12 +146,12 @@ function processGWASData(data) {
     }
 
     const nonSnpColumns = new Set([
-        'id', 
-        'ageOfEntry', 
-        'ageOfExit', 
-        'gender', 
-        'prs', 
-        'case', 
+        'id',
+        'ageOfEntry',
+        'ageOfExit',
+        'gender',
+        'prs',
+        'case',
         'ageOfOnset'
     ]);
     // Extract feature names
@@ -168,13 +174,13 @@ function processGWASData(data) {
 
     // Prepare training data
     trainingData = {
-        features: trainRaw.map(row => featureNames.map(f => row[f] || 0)),
+        features: trainRaw.map(row => snpColumns.map(f => row[f] || 0)),
         labels: trainRaw.map(row => row.case || 0)
     };
 
     // Prepare test data
     testData = {
-        features: testRaw.map(row => featureNames.map(f => row[f] || 0)),
+        features: testRaw.map(row => snpColumns.map(f => row[f] || 0)),
         labels: testRaw.map(row => row.case || 0)
     };
 
@@ -186,24 +192,33 @@ function processGWASData(data) {
 }
 
 window.initializeFederation = async function () {
-    if (!trainingData) {
-        logMessage('Please load GWAS data first', 'error');
-        return;
+    // if (!trainingData) {
+    //     logMessage('Please load GWAS data first', 'error');
+    //     return;
+    // }
+
+    if (trainingData !== null && testData !== null) {
+        createLRModel()
     }
-
-    const roomId = document.getElementById('roomId').value;
-    const selfName = document.getElementById('selfName').value;
-    const minPeers = parseInt(document.getElementById('minPeers').value);
-    const maxRounds = parseInt(document.getElementById('maxRounds').value);
-    const learningRate = parseFloat(document.getElementById('learningRate').value);
-
+    
     logMessage('Creating logistic regression model...');
+    
+    if (decentifai === null) {
+        try {
+            await setupFederation()
+        } catch (error) {
+            logMessage(`Error initializing federation: ${error.message}`, 'error');
+        }
+    }
+    window.decentifai.model = model
+};
 
-    // Create TensorFlow.js model
+function createLRModel() {
+    const learningRate = parseFloat(document.getElementById('learningRate').value);
     model = tf.sequential({
         layers: [
             tf.layers.dense({
-                inputShape: [featureNames.length],
+                inputShape: [snpColumns?.length || 313],
                 units: 1,
                 activation: 'sigmoid',
                 kernelInitializer: 'glorotUniform'
@@ -217,7 +232,6 @@ window.initializeFederation = async function () {
         metrics: ['accuracy']
     });
 
-    // Add methods for Decentifai
     model.getLoss = async function () {
         if (!testData) return null;
         const xs = tf.tensor2d(testData.features);
@@ -236,75 +250,78 @@ window.initializeFederation = async function () {
         const xs = tf.tensor2d(testData.features);
         const predsTensor = model.predict(xs);
         const preds = await predsTensor.data();
-        
+
         const auc = calculateAUC(testData.labels, preds);
-        
+
         xs.dispose();
         predsTensor.dispose();
         return auc;
     };
 
+    model.train = async (trainingArgs) => {
+        const { data: { features, labels }, options } = trainingArgs;
+        return await model.fit(tf.tensor2d(features), tf.tensor2d(labels, [trainingData.labels.length, 1]), options);
+    };
+    window.model = model;
+}
+
+async function setupFederation() {
+    const roomId = document.getElementById('roomId').value;
+    const selfName = document.getElementById('selfName').value;
+    const minPeers = parseInt(document.getElementById('minPeers').value);
+    const maxRounds = parseInt(document.getElementById('maxRounds').value);
     logMessage('Initializing Decentifai federation...');
+    
+    decentifai = new Decentifai({
+        appId: decentifaiAppId,
+        roomId: roomId,
+        connectionType: searchParams.get("connectionType") === "trystero" ? "trystero" : 'webrtc',
+        iceServers: searchParams.get("useTurn") === "true" ? await getICEServers() : [],
+        backend: 'tfjs',
+        metadata: {
+            name: selfName
+        },
+        model: model,
+        trainingData: trainingData,
+        testData: testData,
+        trainingOptions: {
+            epochs: 3,
+            batchSize: 5000,
+            verbose: 0,
+            shuffle: true
+        },
+        federationOptions: {
+            minPeers: minPeers,
+            maxPeers: 10,
+            minRounds: 5,
+            maxRounds: maxRounds,
+            waitTime: 2000,
+            convergenceThresholds: {
+                lossDelta: 0.01,
+                accuracyDelta: 0.001,
+                stabilityWindow: 3
+            }
+        },
+        autoTrain: false,
+        debug: true
+    });
 
-    try {
-        model.train = async (trainingArgs) => {
-            const { data: { features, labels }, options } = trainingArgs;
-            return await model.fit(tf.tensor2d(features), tf.tensor2d(labels, [trainingData.labels.length, 1]), options);
-        };
-
-        decentifai = new Decentifai({
-            appId: decentifaiAppId,
-            roomId: roomId,
-            connectionType: searchParams.get("connectionType") === "trystero" ? "trystero" : 'webrtc',
-            iceServers: searchParams.get("useTurn") === "true" ? await getICEServers(): [],
-            backend: 'tfjs',
-            metadata: {
-                name: selfName
-            },
-            model: model,
-            trainingData: trainingData,
-            testData: testData,
-            trainingOptions: {
-                epochs: 3,
-                batchSize: 5000,
-                verbose: 0,
-                shuffle: true
-            },
-            federationOptions: {
-                minPeers: minPeers,
-                maxPeers: 10,
-                minRounds: 5,
-                maxRounds: maxRounds,
-                waitTime: 2000,
-                convergenceThresholds: {
-                    lossDelta: 0.01,
-                    accuracyDelta: 0.001,
-                    stabilityWindow: 3
-                }
-            },
-            autoTrain: false,
-            debug: true
-        });
-
-        window.decentifai = decentifai;
-        window.model = model;
-        if (!selfName) {
-            document.getElementById("selfName").value = decentifai.ydoc.clientID
-        }
-        setupEventListeners();
-
-        document.getElementById('status').textContent = 'Connected';
-        document.getElementById('status').className = 'text-lg font-semibold text-green-400';
-        document.getElementById('connectBtn').disabled = true;
-        document.getElementById('startBtn').disabled = false;
-        document.getElementById('evaluateBtn').disabled = false;
-
-        logMessage('✓ Successfully connected to federation');
-
-    } catch (error) {
-        logMessage(`Error initializing federation: ${error.message}`, 'error');
+    window.decentifai = decentifai;
+    
+    if (!selfName) {
+        document.getElementById("selfName").value = decentifai.ydoc.clientID
     }
-};
+    setupEventListeners();
+
+    document.getElementById('status').textContent = 'Connected';
+    document.getElementById('status').className = 'text-lg font-semibold text-green-400';
+    document.getElementById('connectBtn').disabled = true;
+    document.getElementById('startBtn').disabled = false;
+    document.getElementById('evaluateBtn').disabled = false;
+
+    logMessage('✓ Successfully connected to federation');
+
+}
 
 function setupEventListeners() {
     decentifai.on('peersAdded', (e) => {
@@ -474,9 +491,9 @@ async function displaySNPEffects() {
         absCoefficient: Math.abs(weightsArray[idx][0]),
         index: idx
     }))
-    .filter(effect => snpColumns.includes(effect.name))
-    .sort((a, b) => b.absCoefficient - a.absCoefficient)
-    .slice(0, 20);
+        .filter(effect => snpColumns.includes(effect.name))
+        .sort((a, b) => b.absCoefficient - a.absCoefficient)
+        .slice(0, 20);
 
     // 2. Approximation of Standard Error (SE) for Confidence Intervals
     // We calculate SE ~ 1 / sqrt(Sum(x^2 * p * (1-p))) (Diagonal of Fisher Info Matrix)
@@ -484,7 +501,7 @@ async function displaySNPEffects() {
     // To keep UI responsive, we take a subset of up to 1000 samples.
     const sampleSize = Math.min(trainingData.features.length, 1000);
     const subsetFeatures = trainingData.features.slice(0, sampleSize);
-    
+
     const xs = tf.tensor2d(subsetFeatures);
     const probsTensor = model.predict(xs);
     const probs = await probsTensor.data();
@@ -495,7 +512,7 @@ async function displaySNPEffects() {
         let hessianDiag = 0;
         const col = snp.index;
 
-        for(let i = 0; i < sampleSize; i++) {
+        for (let i = 0; i < sampleSize; i++) {
             const p = probs[i];
             const x = subsetFeatures[i][col];
             // Diagonal element of Hessian: sum(x_ij^2 * p_i * (1-p_i))
@@ -504,7 +521,7 @@ async function displaySNPEffects() {
 
         // Prevent division by zero
         hessianDiag = Math.max(hessianDiag, 1e-6);
-        
+
         const se = 1 / Math.sqrt(hessianDiag);
         // 95% Confidence Interval: Beta +/- 1.96 * SE
         return {
