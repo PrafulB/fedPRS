@@ -1,5 +1,5 @@
-import { Decentifai } from 'http://localhost:5505/src/decentifai.js';
-// import { Decentifai } from 'https://prafulb.github.io/decentifai/src/decentifai.js';
+// import { Decentifai } from 'http://localhost:5505/src/decentifai.js';
+import { Decentifai } from 'https://prafulb.github.io/decentifai/src/decentifai.js';
 
 let GET_TURN_CREDS_API = "https://noisy-math-e490.prtsh32.workers.dev/"
 
