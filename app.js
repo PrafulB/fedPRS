@@ -163,7 +163,7 @@ function processGWASData(data) {
     // Core features for GWAS
     const coreFeatures = ['ageOfEntry', 'ageOfExit', 'gender', 'sex', 'PRS'];
     featureNames = [...coreFeatures.filter(h => headers.includes(h)), ...snpColumns];
-    console.log(featureNames)
+    
     logMessage(`Found ${snpColumns.length} SNPs and ${featureNames.length} total features`);
 
     // Split data into train/test (80/20)
@@ -486,13 +486,12 @@ async function displaySNPEffects() {
     const weightsArray = weights.arraySync();
 
     // 1. Filter to get Top 20 SNPs by absolute coefficient
-    let topSnps = featureNames.map((name, idx) => ({
+    let topSnps = snpColumns.map((name, idx) => ({
         name: name,
         coefficient: weightsArray[idx][0],
         absCoefficient: Math.abs(weightsArray[idx][0]),
         index: idx
     }))
-        .filter(effect => snpColumns.includes(effect.name))
         .sort((a, b) => b.absCoefficient - a.absCoefficient)
         .slice(0, 20);
 
