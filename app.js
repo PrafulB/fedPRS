@@ -150,6 +150,7 @@ function processGWASData(data) {
         'ageOfEntry',
         'ageOfExit',
         'gender',
+        'sex',
         'prs',
         'case',
         'ageOfOnset'
@@ -160,9 +161,9 @@ function processGWASData(data) {
     snpColumns = headers.filter(h => !nonSnpColumns.has(h));
 
     // Core features for GWAS
-    const coreFeatures = ['ageOfEntry', 'ageOfExit', 'gender', 'PRS'];
-    featureNames = [...coreFeatures, ...snpColumns];
-
+    const coreFeatures = ['ageOfEntry', 'ageOfExit', 'gender', 'sex', 'PRS'];
+    featureNames = [...coreFeatures.filter(h => headers.includes(h)), ...snpColumns];
+    console.log(featureNames)
     logMessage(`Found ${snpColumns.length} SNPs and ${featureNames.length} total features`);
 
     // Split data into train/test (80/20)
